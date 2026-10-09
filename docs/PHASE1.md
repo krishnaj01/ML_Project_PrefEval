@@ -1,5 +1,10 @@
 # Phase 1: Local Baseline Reproduction (PrefEval classification task)
 
+> **Note (repository move):** this document was written in the original working fork
+> (https://github.com/krishnaj01/PrefEval, branch `phase1-local-ollama`). In this cleaned repository the legacy files it
+> mentions (`prefeval.zip`, `run_experiments.py`, `*.patch`, `utils/`, `classification_task/`, `requirements.txt`) no longer
+> exist. See the top-level `README.md`.
+
 **Project:** *Improving Long-Context Preference Following in LLMs via a Trained Preference-Detection
 Classifier and Enhanced Retrieval* (Krishna Jhanwar, 12341250). Base paper: Zhao et al., ICLR 2025 (PrefEval).
 

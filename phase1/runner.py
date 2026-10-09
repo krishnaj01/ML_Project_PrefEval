@@ -169,6 +169,16 @@ def read_done(path, repair=False):
     return records
 
 
+def done_in_scope(cfg, cell):
+    """Finished records of a cell that fall inside this config's scope (e.g. a smoke config's `limit`).
+
+    Several configs share result files (a smoke test's 5 questions are the first 5 of the full run),
+    so progress must only count task_ids below the config's own question count.
+    """
+    total = n_questions(cell["topic"], cfg["limit"], cell["form"], cell["method"])
+    return {k: v for k, v in read_done(cell_path(cfg["model"], cell)).items() if k < total}
+
+
 def append_record(path, rec):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a") as f:
@@ -386,7 +396,7 @@ def cmd_run(opts):
                 elif rag_available_count(topic, form) < _n_dataset(topic):
                     log.warning("RAG for %s/%s covers only %d of %d questions (upstream retrieval file ends early)",
                                 topic, form, rag_available_count(topic, form), _n_dataset(topic))
-    todo = sum(n_questions(c["topic"], cfg["limit"], c["form"], c["method"]) - len(read_done(cell_path(cfg["model"], c))) for c in cells)
+    todo = sum(n_questions(c["topic"], cfg["limit"], c["form"], c["method"]) - len(done_in_scope(cfg, c)) for c in cells)
     log.info("Config %s | model %s (%s) | %d cells | %d questions remaining | log: %s",
              opts.config, cfg["model"], mc["ollama_tag"], len(cells), todo, log_path)
     env_error = check_ollama_env(cfg["model"], mc)
@@ -396,7 +406,7 @@ def cmd_run(opts):
             return 3
     if opts.dry_run:
         for c in cells:
-            done = len(read_done(cell_path(cfg["model"], c)))
+            done = len(done_in_scope(cfg, c))
             print(f"{c['topic']:34s} {c['form']:17s} inter{c['inter_turns']:<3d} {c['method']:10s} "
                   f"{done}/{n_questions(c['topic'], cfg['limit'], c['form'], c['method'])}")
         return 0
@@ -488,7 +498,7 @@ def cmd_status(opts):
     cfg = load_experiment(opts.config)
     rows, remaining_by_method, sec_by_method = [], {}, {}
     for c in iter_cells(cfg):
-        recs = read_done(cell_path(cfg["model"], c))
+        recs = done_in_scope(cfg, c)
         total = n_questions(c["topic"], cfg["limit"], c["form"], c["method"])
         m = c["method"]
         remaining_by_method[m] = remaining_by_method.get(m, 0) + total - len(recs)

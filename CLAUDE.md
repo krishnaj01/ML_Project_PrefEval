@@ -8,17 +8,18 @@ and the paper is `8673_Do_LLMs_Recognize_Your_Pr.pdf`. It runs in three phases:
 
 ## Environment
 - Conda env `prefeval` (Python 3.11): `source ~/anaconda3/etc/profile.d/conda.sh && conda activate prefeval`.
-  Phase 1 deps are in `requirements-phase1.txt`. The original `requirements.txt` (vLLM, torch 2.4, boto3) is NOT used.
+  Dependencies are in `requirements-phase1.txt`.
 - Inference runs on **Ollama** (`localhost:11434`, systemd service), not vLLM and not Bedrock. The GPU is an RTX 3060 with 12 GB.
 - Run everything from the repo root as modules: `python -m phase1.runner ...` and `python -m phase1.aggregate`.
 
 ## Layout
-- `phase1/` holds the active Phase 1 pipeline (see `phase1/CLAUDE.md`).
+- `phase1/` holds the Phase 1 pipeline (see `phase1/CLAUDE.md`). `phase1/upstream/` holds verbatim copies of the original prompt code.
 - `configs/phase1/` holds `models.yaml` and one YAML per experiment tier.
-- `results/phase1/` holds Phase 1 baseline results, which are committed. **Never write Phase 2/3 outputs here.**
+- `results/phase1/` holds the Phase 1 baseline results, which are committed. **Never write Phase 2/3 outputs here.**
+- `benchmark_dataset/` is the PrefEval data (upstream commit 5079505, minus the Bedrock-only generation script).
 - `logs/` holds verbose run logs and is git-ignored.
-- `classification_task/`, `generation_task/`, `utils/`, `run_experiments.py`, `*.patch` are the upstream code plus
-  the user's earlier (broken) local-vLLM attempt. They are **not used** by Phase 1. Do not modify or delete them without asking.
+- This repository is the cleaned continuation of the original working fork (https://github.com/krishnaj01/PrefEval, branch
+  `phase1-local-ollama`). The upstream Bedrock/vLLM code, the failed first attempt, and the reports were deliberately left out (see README).
 
 ## Working rules (from the user)
 - **Long-running jobs** (anything over ~5 min): give the user the command, a time estimate, and the tmux
