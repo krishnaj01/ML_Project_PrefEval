@@ -2,13 +2,14 @@
 
 This is a fork of amazon-science/PrefEval (ICLR 2025). The project proposal is `12341250_KrishnaJhanwar_Proposal__PrefEval__ML_Project.pdf`
 and the paper is `8673_Do_LLMs_Recognize_Your_Pr.pdf`. It runs in three phases:
-1. **Phase 1, the current phase:** reproduce the paper's classification-task (MCQ) baselines with a **local** model. See `docs/PHASE1.md`.
-2. Phase 2: train a small "does this turn state a preference?" classifier (DistilBERT/ModernBERT/MiniLM).
+1. **Phase 1 (done):** reproduce the paper's classification-task (MCQ) baselines with a **local** model. See `docs/PHASE1.md`.
+2. **Phase 2 (done):** "does this turn state a preference?" classifier: DistilBERT, ModernBERT, TinyLlama, Qwen3 + ensembles.
+   See `docs/PHASE2.md` and `phase2/CLAUDE.md`.
 3. Phase 3: classifier → preference memory + modern retriever (bge/e5), evaluated against the Phase 1 baselines.
 
 ## Environment
 - Conda env `prefeval` (Python 3.11): `source ~/anaconda3/etc/profile.d/conda.sh && conda activate prefeval`.
-  Dependencies are in `requirements-phase1.txt`.
+  Dependencies are in `requirements-phase1.txt`. Phase 2 uses a separate env, `prefeval-p2` (`requirements-phase2.txt`, transformers v5).
 - Inference runs on **Ollama** (`localhost:11434`, systemd service), not vLLM and not Bedrock. The GPU is an RTX 3060 with 12 GB.
 - Run everything from the repo root as modules: `python -m phase1.runner ...` and `python -m phase1.aggregate`.
 
@@ -16,6 +17,7 @@ and the paper is `8673_Do_LLMs_Recognize_Your_Pr.pdf`. It runs in three phases:
 - `phase1/` holds the Phase 1 pipeline (see `phase1/CLAUDE.md`). `phase1/upstream/` holds verbatim copies of the original prompt code.
 - `configs/phase1/` holds `models.yaml` and one YAML per experiment tier.
 - `results/phase1/` holds the Phase 1 baseline results, which are committed. **Never write Phase 2/3 outputs here.**
+- `phase2/`, `configs/phase2/`, `data/phase2/`, `results/phase2/` hold Phase 2. `models/phase2/` (checkpoints) is git-ignored.
 - `benchmark_dataset/` is the PrefEval data (upstream commit 5079505, minus the Bedrock-only generation script).
 - `logs/` holds verbose run logs and is git-ignored.
 - This repository is the cleaned continuation of the original working fork (https://github.com/krishnaj01/PrefEval, branch

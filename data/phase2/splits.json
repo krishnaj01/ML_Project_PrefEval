@@ -1,0 +1,101 @@
+{
+ "seed": 42,
+ "n_folds": 5,
+ "topic_folds": {
+  "0": [
+   "entertain_shows",
+   "entertain_sports",
+   "professional_work_location_style",
+   "shop_fashion"
+  ],
+  "1": [
+   "education_resources",
+   "entertain_music_book",
+   "shop_home",
+   "travel_hotel"
+  ],
+  "2": [
+   "education_learning_styles",
+   "lifestyle_health",
+   "pet_ownership",
+   "shop_technology"
+  ],
+  "3": [
+   "lifestyle_beauty",
+   "lifestyle_dietary",
+   "shop_motors",
+   "travel_activities"
+  ],
+  "4": [
+   "entertain_games",
+   "lifestyle_fit",
+   "travel_restaurant",
+   "travel_transportation"
+  ]
+ },
+ "oasst_fold_rule": "sha256(conversation tree id) % n_folds",
+ "rounds": {
+  "0": {
+   "train_folds": [
+    2,
+    3,
+    4
+   ],
+   "val_fold": 1,
+   "test_fold": 0,
+   "n_train": 7569,
+   "n_val": 2788,
+   "n_test": 2593
+  },
+  "1": {
+   "train_folds": [
+    0,
+    3,
+    4
+   ],
+   "val_fold": 2,
+   "test_fold": 1,
+   "n_train": 7914,
+   "n_val": 2248,
+   "n_test": 2788
+  },
+  "2": {
+   "train_folds": [
+    0,
+    1,
+    4
+   ],
+   "val_fold": 3,
+   "test_fold": 2,
+   "n_train": 8012,
+   "n_val": 2690,
+   "n_test": 2248
+  },
+  "3": {
+   "train_folds": [
+    0,
+    1,
+    2
+   ],
+   "val_fold": 4,
+   "test_fold": 3,
+   "n_train": 7629,
+   "n_val": 2631,
+   "n_test": 2690
+  },
+  "4": {
+   "train_folds": [
+    1,
+    2,
+    3
+   ],
+   "val_fold": 0,
+   "test_fold": 4,
+   "n_train": 7726,
+   "n_val": 2593,
+   "n_test": 2631
+  }
+ },
+ "dataset_sha256": "80b5ade52a7bea918c907a1c1034a30e4fab40af7e3d996457a37a791e7aad08",
+ "rows": 12950
+}

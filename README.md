@@ -3,15 +3,16 @@
 **Improving Long-Context Preference Following in LLMs via a Trained Preference-Detection Classifier and Enhanced Retrieval**
 Course project by **Krishna Jhanwar (12341250)**, built on *PrefEval* (Zhao et al., ICLR 2025).
 
-This repository is the clean continuation of the project. **Phase 1 was carried out in the working fork
-[github.com/krishnaj01/PrefEval](https://github.com/krishnaj01/PrefEval), branch `phase1-local-ollama`**, which also holds the full
-development history, the mid-term report and slides, and the legacy files removed here. The git history is preserved in this
-repository too.
+This repository is the clean continuation of the project. **Phases 1 and 2 were carried out in the working fork
+[github.com/krishnaj01/PrefEval](https://github.com/krishnaj01/PrefEval)**: branch `phase1-local-ollama` (Phase 1) and branch
+`phase2-classifier` (Phase 2). The fork also holds the full development history, the mid-term and phase reports (LaTeX), and the legacy
+files removed here. Phase 1's git history is preserved in this repository; Phase 2 was copied in as files (its commit history lives on
+the fork's `phase2-classifier` branch).
 
 | Phase | Goal | Status |
 |---|---|---|
 | **1** | Rebuild PrefEval's evaluation to run locally and reproduce its baselines (classification task) | ✅ complete |
-| 2 | Train a small "does this turn state a preference?" classifier (DistilBERT / ModernBERT / MiniLM) | planned |
+| **2** | Train a small "does this turn state a preference?" classifier (DistilBERT, ModernBERT, TinyLlama-1.1B, Qwen3-1.7B + ensembles) | ✅ complete |
 | 3 | Classifier → structured preference memory + modern retriever (bge / e5), evaluated against the Phase 1 baselines | planned |
 
 ---
@@ -28,8 +29,9 @@ repository too.
 9. [How to set up and run](#9-how-to-set-up-and-run)
 10. [Repository layout](#10-repository-layout)
 11. [What was removed compared with the original repository](#11-what-was-removed-compared-with-the-original-repository)
-12. [Next steps (Phases 2 and 3)](#12-next-steps-phases-2-and-3)
-13. [References, license and AI assistance](#13-references-license-and-ai-assistance)
+12. [Phase 2: preference-detection classifier](#12-phase-2-preference-detection-classifier)
+13. [Next steps (Phase 3)](#13-next-steps-phase-3)
+14. [References, license and AI assistance](#14-references-license-and-ai-assistance)
 
 ---
 
@@ -263,7 +265,14 @@ results/phase1/             all Phase 1 results (JSONL per cell), run_manifest.j
 benchmark_dataset/          PrefEval data, LMSYS distractor turns, MCQ options, precomputed SimCSE retrieval
 docs/PHASE1.md              detailed Phase 1 notes (plan, flows, commands, run history)
 config.yaml                 original system prompt / token limits (read by the runner)
-CLAUDE.md, phase1/CLAUDE.md working notes for AI-assisted development
+phase2/                     Phase 2 pipeline: build_data, pseudolabel, splits, train, llm_baseline, evaluate, ensemble, report, pipeline
+configs/phase2/             data.yaml (seeds, sampling, filters) + one YAML per model
+data/phase2/                turn-level dataset, LLM pseudo-label caches, audit sample + report, folds, data card, manifest (hashes)
+results/phase2/             per-model/fold metrics, predictions, loss logs; eval/, ensemble/, figures/, tables/, run_manifest.jsonl
+scripts/phase2_tmux.sh      run any Phase 2 command inside tmux
+docs/PHASE2.md              Phase 2 task/data specification, annotation guidelines, pipeline, outputs
+models/phase2/              trained checkpoints (git-ignored, ~4.7 GB; retrain with the configs or copy from the working machine)
+CLAUDE.md, phase*/CLAUDE.md working notes for AI-assisted development
 LICENSE                     original PrefEval license (CC BY-NC 4.0)
 ```
 
@@ -277,21 +286,59 @@ Removed deliberately. All of it remains available in the [working fork](https://
 | `requirements.txt` | vLLM / torch / boto3 stack, replaced by `requirements-phase1.txt` |
 | `benchmark_dataset/claude_generate_preferences_questions.py`, `gen_data_prompt.txt`, `rag_retrieval/count.py`, `mcq_options/travel_hotel copy.json` | Bedrock dataset-generation script, a helper with the authors' private paths, a duplicate file |
 
-## 12. Next steps (Phases 2 and 3)
+## 12. Phase 2: preference-detection classifier
 
-- **Phase 2:** a preference-detection classifier. Positives: explicit preference sentences and the preference-revealing implicit turns. Negatives:
-  LMSYS turns and the other dialogue turns. **Use a topic-level train/test split, so Phase 3 is evaluated on topics the classifier never saw.**
-  Report per-form precision / recall, the confusion matrix, and latency vs. an LLM-prompted detector.
-- **Phase 3:** the classifier writes preferences to a memory list. At query time, memory + top-k from bge / e5 + query go into the prompt. It will be evaluated with this
-  same runner, prompts, parser and settings guard against the Phase 1 baselines (both models, both forms, all context lengths).
+Full details: [`docs/PHASE2.md`](docs/PHASE2.md). Environment: `prefeval-p2` (`requirements-phase2.txt`, exact versions pinned at the bottom).
+
+- **Task:** binary classification of a single user message: does it state a lasting personal preference? The **only model input is the
+  message text**; the threshold is tuned per fold on validation data.
+- **Data (12,950 rows: 3,143 positive / 9,807 negative):**
+  - 3,580 gold labels from PrefEval's structure
+  - 9,188 LLM pseudo-labels (Llama-3-8B via Ollama) for persona-dialogue turns and 5,000 OpenAssistant messages
+  - 182 human-audited rows
+  - A 200-row manual audit exposed two systematic error types. Targeted refinement (a strict re-check of OpenAssistant "yes" labels; persona positives as the union of the LLM pick and a word-overlap check; a strict filter for ambiguous persona negatives) raised audit agreement from 73.9% to 90.7%.
+- **Leakage control:**
+  - topic-level 5-fold cross-validation, so test topics are never seen in training
+  - the 316 LMSYS distractor turns are never trained on and serve only as a false-alarm test
+  - both rules are asserted in code
+- **Results (pooled over unseen-topic test folds):**
+
+  | Model | F1 | Precision | Recall | ms / message | Real-chat false alarms |
+  |---|---|---|---|---|---|
+  | DistilBERT | 0.969 | 0.983 | 0.955 | 1.4 | 0.4% |
+  | ModernBERT | 0.972 | 0.988 | 0.956 | 6.5 | 0.3% |
+  | TinyLlama-1.1B (LoRA) | 0.974 | 0.988 | 0.961 | 17.1 | 0.1% |
+  | Qwen3-1.7B (LoRA) | 0.976 | 0.988 | 0.965 | 25.1 | 1.5% |
+
+  - **vs a prompted LLM** on the same 2,000 messages: F1 0.990–0.994 vs 0.879 for zero-shot Llama-3-8B, which wrongly flags 16.5% of non-preference messages. DistilBERT is about 51× faster (1.4 vs 72 ms).
+  - **Ensembles:** all 15 subsets × soft / hard / stacking. The best (TinyLlama + Qwen3) gains only +0.001 F1, because the models' errors are strongly correlated (0.68–0.75).
+  - **Main limitation:** casual real-chat preferences are mostly missed (OpenAssistant recall 16–26%).
+- **Reproducibility:** seeded; two identical runs give identical probabilities. Model and dataset revisions, the labeller digest and prompt hashes are recorded.
+
+```bash
+conda create -y -n prefeval-p2 python=3.11 && conda activate prefeval-p2 && pip install -r requirements-phase2.txt
+python -m phase2.pipeline --stage {data|pseudo|splits|train|baseline|analyze|all}     # each stage resumes / skips finished work
+scripts/phase2_tmux.sh "python -m phase2.pipeline --stage train"                      # long stages inside tmux
+```
+The data and results in this repository are complete, so `analyze` reproduces every table and figure exactly without retraining.
+
+## 13. Next steps (Phase 3)
+
+- The classifier writes detected preferences to a memory list. At query time, memory + top-k exchanges from bge / e5 + the query go into the prompt.
+- Detector: **DistilBERT** by default; Qwen3 as the maximum-accuracy variant. Each fold's model is used only on that fold's held-out topics,
+  so all 20 topics are covered without leakage.
+- Evaluation reuses the Phase 1 runner, prompts, parser and Ollama settings guard against the Phase 1 baselines (both models, both forms,
+  all context lengths).
 - Optional: CoT / Self-Critic for Mistral at 10k–23k; a full-precision KV-cache check for the Mistral RAG gap; implicit-persona.
 
-## 13. References, license and AI assistance
+## 14. References, license and AI assistance
 
 - S. Zhao, M. Hong, Y. Liu, D. Hazarika, K. Lin. *Do LLMs Recognize Your Preferences? Evaluating Personalized Preference Following
   in LLMs.* ICLR 2025. [arXiv:2502.09597](https://arxiv.org/abs/2502.09597). Code: [amazon-science/PrefEval](https://github.com/amazon-science/PrefEval).
 - L. Zheng et al. *LMSYS-Chat-1M.* ICLR 2024. T. Gao et al. *SimCSE.* EMNLP 2021.
-- Phase 1 working repository: [github.com/krishnaj01/PrefEval](https://github.com/krishnaj01/PrefEval) (branch `phase1-local-ollama`).
+- Working repository: [github.com/krishnaj01/PrefEval](https://github.com/krishnaj01/PrefEval) (branches `phase1-local-ollama`, `phase2-classifier`).
+- Phase 2 models: DistilBERT (Sanh et al., 2019), ModernBERT (Warner et al., 2024), TinyLlama (Zhang et al., 2024), Qwen3 (Qwen Team, 2025),
+  LoRA (Hu et al., ICLR 2022). Data: OpenAssistant `oasst1` (Köpf et al., NeurIPS 2023).
 
 The dataset and the vendored upstream code are under the original PrefEval license (see `LICENSE`, CC BY-NC 4.0).
 
