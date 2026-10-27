@@ -3,17 +3,17 @@
 **Improving Long-Context Preference Following in LLMs via a Trained Preference-Detection Classifier and Enhanced Retrieval**
 Course project by **Krishna Jhanwar (12341250)**, built on *PrefEval* (Zhao et al., ICLR 2025).
 
-This repository is the clean continuation of the project. **Phases 1 and 2 were carried out in the working fork
-[github.com/krishnaj01/PrefEval](https://github.com/krishnaj01/PrefEval)**: branch `phase1-local-ollama` (Phase 1) and branch
-`phase2-classifier` (Phase 2). The fork also holds the full development history, the mid-term and phase reports (LaTeX), and the legacy
-files removed here. Phase 1's git history is preserved in this repository; Phase 2 was copied in as files (its commit history lives on
-the fork's `phase2-classifier` branch).
+This repository is the clean continuation of the project. **All three phases were carried out in the working fork
+[github.com/krishnaj01/PrefEval](https://github.com/krishnaj01/PrefEval)**: branches `phase1-local-ollama` (Phase 1),
+`phase2-classifier` (Phase 2) and `phase3-memory` (Phase 3). The fork also holds the full development history, the mid-term and phase
+reports (LaTeX, in `report/`), and the legacy files removed here. Phase 1's git history is preserved in this repository; Phases 2 and 3
+were copied in as files (their commit histories live on the fork's branches).
 
 | Phase | Goal | Status |
 |---|---|---|
 | **1** | Rebuild PrefEval's evaluation to run locally and reproduce its baselines (classification task) | ✅ complete |
 | **2** | Train a small "does this turn state a preference?" classifier (DistilBERT, ModernBERT, TinyLlama-1.1B, Qwen3-1.7B + ensembles) | ✅ complete |
-| 3 | Classifier → structured preference memory + modern retriever (bge / e5), evaluated against the Phase 1 baselines | planned |
+| **3** | Classifier → structured preference memory + modern retriever (EmbeddingGemma-2), evaluated against the Phase 1 baselines | ✅ complete |
 
 ---
 
@@ -30,7 +30,7 @@ the fork's `phase2-classifier` branch).
 10. [Repository layout](#10-repository-layout)
 11. [What was removed compared with the original repository](#11-what-was-removed-compared-with-the-original-repository)
 12. [Phase 2: preference-detection classifier](#12-phase-2-preference-detection-classifier)
-13. [Next steps (Phase 3)](#13-next-steps-phase-3)
+13. [Phase 3: preference memory and modern retrieval](#13-phase-3-preference-memory-and-modern-retrieval)
 14. [References, license and AI assistance](#14-references-license-and-ai-assistance)
 
 ---
@@ -272,6 +272,13 @@ results/phase2/             per-model/fold metrics, predictions, loss logs; eval
 scripts/phase2_tmux.sh      run any Phase 2 command inside tmux
 docs/PHASE2.md              Phase 2 task/data specification, annotation guidelines, pipeline, outputs
 models/phase2/              trained checkpoints (git-ignored, ~4.7 GB; retrain with the configs or copy from the working machine)
+
+phase3/                     Phase 3: embed, retrieve, retrieval_eval, conversations, memory, prompts, runner, stress, aggregate, checks
+configs/phase3/             encoders.yaml (pinned commits + prompts), retrieval.yaml, memory.yaml, one YAML per run tier
+results/phase3/             retrieval/ (rankings, summary, figures), memory/, stress/, mcq/ (1 JSONL per cell), summary/, run_manifest.jsonl
+scripts/phase3_tmux.sh      run any Phase 3 command inside tmux
+docs/PHASE3.md              Phase 3 design decisions, verification, commands, results
+data/phase3/emb/            embedding caches (git-ignored; rebuilt by phase3.embed)
 CLAUDE.md, phase*/CLAUDE.md working notes for AI-assisted development
 LICENSE                     original PrefEval license (CC BY-NC 4.0)
 ```
@@ -322,23 +329,72 @@ scripts/phase2_tmux.sh "python -m phase2.pipeline --stage train"                
 ```
 The data and results in this repository are complete, so `analyze` reproduces every table and figure exactly without retraining.
 
-## 13. Next steps (Phase 3)
+## 13. Phase 3: preference memory and modern retrieval
 
-- The classifier writes detected preferences to a memory list. At query time, memory + top-k exchanges from bge / e5 + the query go into the prompt.
-- Detector: **DistilBERT** by default; Qwen3 as the maximum-accuracy variant. Each fold's model is used only on that fold's held-out topics,
-  so all 20 topics are covered without leakage.
-- Evaluation reuses the Phase 1 runner, prompts, parser and Ollama settings guard against the Phase 1 baselines (both models, both forms,
-  all context lengths).
-- Optional: CoT / Self-Critic for Mistral at 10k–23k; a full-precision KV-cache check for the Mistral RAG gap; implicit-persona.
+Full details: [`docs/PHASE3.md`](docs/PHASE3.md). The report (`report/phase3_report.pdf`) is on the fork's `phase3-memory` branch.
+Environment: `prefeval-p2` + `requirements-phase3.txt`.
+
+**Idea.** Every user turn is scored by the Phase 2 classifier (DistilBERT, 1.4 ms). Turns that state a preference go into a memory list,
+each stored with the assistant message just before it (for implicit-choice: the options list plus the user's selection). At question
+time the memory is written into the prompt as a short "Known user preferences" block: all entries if there are 5 or fewer, otherwise the
+5 most similar to the question (EmbeddingGemma-2). The classifier never sees a question's topic in training: each topic uses the fold
+model that was tested on it.
+
+**Step 1: retrieval benchmark (no LLM).** Five current encoders vs the paper's SimCSE, finding the preference message among all earlier messages:
+
+| Retriever | Explicit R@5 at 1k | 3k | 10k | 23k | Implicit R@5 at 23k | ms / message |
+|---|---|---|---|---|---|---|
+| SimCSE (paper) | 0.95 | 0.83 | 0.60 | 0.40 | 0.58 | – |
+| bge-base-v1.5 | 0.96 | 0.92 | 0.68 | 0.57 | 0.92 | 3.5 |
+| e5-base-v2 | 0.96 | 0.86 | 0.44 | 0.31 | 0.93 | 3.6 |
+| bge-large-v1.5 | 0.98 | 0.95 | 0.74 | 0.66 | 0.89 | 9.8 |
+| mxbai-embed-large | 1.00 | 0.99 | 0.83 | 0.78 | 0.88 | 9.8 |
+| **EmbeddingGemma-2** (chosen) | 1.00 | 1.00 | 0.90 | 0.83 | 0.88 | 15.6 |
+
+**Step 2: end-to-end MCQ accuracy** (%, macro over 20 topics; same questions, models, decoding and strict metric as Phase 1; 46,000 questions, about 44 GPU-hours):
+
+| Model, form | Length | Best Phase 1 baseline | **Memory** | RAG, EmbeddingGemma-2 | Memory + RAG |
+|---|---|---|---|---|---|
+| Llama-3-8B, explicit | 3k | 74.8 (RAG) | **96.5** | 93.9 | 92.9 |
+| Llama-3-8B, implicit-choice | 3k | 73.7 (RAG) | **83.5** | 79.1 | 75.4 |
+| Mistral-7B, explicit | 3k | 75.7 (RAG) | **94.9** | 86.1 | 94.4 |
+| Mistral-7B, explicit | 23k | 53.7 (RAG) | **88.6** | – | 87.5 |
+| Mistral-7B, implicit-choice | 3k | 64.0 (RAG) | **79.8** | 65.0 | 78.3 |
+
+- **Memory beats every baseline at every length from 1k tokens up** (11 of 11 cells), and stays almost flat as the conversation grows
+  (Mistral explicit: 97.1 at 0.2k → 88.6 at 23k, while zero-shot falls from 95.5 to 37.6).
+- At 0.2k (no distractors) memory only ties with Reminder on explicit and is below it on implicit (Mistral 81.9 vs 88.4).
+- The new encoder alone lifts the paper's RAG strongly on explicit (Llama 3k: 74.8 → 93.9) but hardly on implicit.
+- **Adding retrieved raw messages on top of memory does not help.** With Llama, most of the losses are format failures (the model writes
+  "Based on your previous…" instead of `<choice>X</choice>`). With Mistral, the two methods give the same answer on 90–98% of questions.
+- **Multi-preference stress test** (Llama, 3k, D extra preferences from other topics in memory): injecting all entries degrades
+  (explicit 96.5 → 90.5, implicit 83.5 → 71.1 at D = 20). Retrieving the top 5 *over the memory* holds 93.9 / 77.0.
+- An upstream quirk was found and documented: in 13 of 20 topics, the paper's explicit RAG decodes SimCSE indices with a `msg_index`
+  file shifted by one LMSYS exchange. Recall and rank are unaffected.
+- Verified in code (`python -m phase3.checks`): our SimCSE top-5 equals upstream's RAG selection on all 9,610 pairs, and every Phase 3
+  prompt reduces byte-for-byte to its Phase 1 counterpart.
+
+```bash
+conda activate prefeval-p2 && pip install -r requirements-phase3.txt            # + torchvision, see the file
+python -m phase3.embed --encoder all && python -m phase3.retrieve --encoder all  # Step 1 (downloads ~4 GB of encoders once)
+python -m phase3.retrieval_eval
+python -m phase3.memory && python -m phase3.stress && python -m phase3.checks     # memory needs models/phase2 (git-ignored)
+scripts/phase3_tmux.sh "python -m phase3.runner run --config configs/phase3/tierA.yaml"   # tiers A, S, B2, B, C_short
+python -m phase3.aggregate                                                       # results/phase3/summary/
+```
+All results are in this repository, so `retrieval_eval` and `aggregate` reproduce every table and figure without any model calls.
+Not run: RAG with EmbeddingGemma-2 alone for Mistral at 10k–23k (optional `tierC_long`, about 12 h).
 
 ## 14. References, license and AI assistance
 
 - S. Zhao, M. Hong, Y. Liu, D. Hazarika, K. Lin. *Do LLMs Recognize Your Preferences? Evaluating Personalized Preference Following
   in LLMs.* ICLR 2025. [arXiv:2502.09597](https://arxiv.org/abs/2502.09597). Code: [amazon-science/PrefEval](https://github.com/amazon-science/PrefEval).
 - L. Zheng et al. *LMSYS-Chat-1M.* ICLR 2024. T. Gao et al. *SimCSE.* EMNLP 2021.
-- Working repository: [github.com/krishnaj01/PrefEval](https://github.com/krishnaj01/PrefEval) (branches `phase1-local-ollama`, `phase2-classifier`).
+- Working repository: [github.com/krishnaj01/PrefEval](https://github.com/krishnaj01/PrefEval) (branches `phase1-local-ollama`, `phase2-classifier`, `phase3-memory`).
 - Phase 2 models: DistilBERT (Sanh et al., 2019), ModernBERT (Warner et al., 2024), TinyLlama (Zhang et al., 2024), Qwen3 (Qwen Team, 2025),
   LoRA (Hu et al., ICLR 2022). Data: OpenAssistant `oasst1` (Köpf et al., NeurIPS 2023).
+- Phase 3 encoders: EmbeddingGemma-2 (Google), mxbai-embed-large-v1 (Mixedbread), bge-base/large-en-v1.5 (Xiao et al., SIGIR 2024),
+  e5-base-v2 (Wang et al., 2022); baseline retriever SimCSE (Gao et al., EMNLP 2021).
 
 The dataset and the vendored upstream code are under the original PrefEval license (see `LICENSE`, CC BY-NC 4.0).
 

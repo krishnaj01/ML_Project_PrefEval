@@ -5,7 +5,8 @@ and the paper is `8673_Do_LLMs_Recognize_Your_Pr.pdf`. It runs in three phases:
 1. **Phase 1 (done):** reproduce the paper's classification-task (MCQ) baselines with a **local** model. See `docs/PHASE1.md`.
 2. **Phase 2 (done):** "does this turn state a preference?" classifier: DistilBERT, ModernBERT, TinyLlama, Qwen3 + ensembles.
    See `docs/PHASE2.md` and `phase2/CLAUDE.md`.
-3. Phase 3: classifier → preference memory + modern retriever (bge/e5), evaluated against the Phase 1 baselines.
+3. **Phase 3 (done):** classifier → preference memory + EmbeddingGemma-2 retrieval, evaluated against the Phase 1 baselines.
+   See `docs/PHASE3.md` and `phase3/CLAUDE.md`.
 
 ## Environment
 - Conda env `prefeval` (Python 3.11): `source ~/anaconda3/etc/profile.d/conda.sh && conda activate prefeval`.
@@ -18,6 +19,8 @@ and the paper is `8673_Do_LLMs_Recognize_Your_Pr.pdf`. It runs in three phases:
 - `configs/phase1/` holds `models.yaml` and one YAML per experiment tier.
 - `results/phase1/` holds the Phase 1 baseline results, which are committed. **Never write Phase 2/3 outputs here.**
 - `phase2/`, `configs/phase2/`, `data/phase2/`, `results/phase2/` hold Phase 2. `models/phase2/` (checkpoints) is git-ignored.
+- `phase3/`, `configs/phase3/`, `results/phase3/` hold Phase 3 (env `prefeval-p2` + `requirements-phase3.txt`). It reads Phase 1/2 outputs
+  but never writes to them; `phase3.memory` needs the git-ignored `models/phase2/` checkpoints. `data/phase3/emb/` is git-ignored.
 - `benchmark_dataset/` is the PrefEval data (upstream commit 5079505, minus the Bedrock-only generation script).
 - `logs/` holds verbose run logs and is git-ignored.
 - This repository is the cleaned continuation of the original working fork (https://github.com/krishnaj01/PrefEval, branch
